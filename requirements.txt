@@ -9,6 +9,7 @@ dash-html-components==2.0.0
 dash-table==5.0.0
 et_xmlfile==2.0.0
 Flask==3.0.3
+gunicorn==21.2.0
 idna==3.11
 importlib_metadata==8.7.0
 itsdangerous==2.2.0
