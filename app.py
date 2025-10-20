@@ -1,4 +1,5 @@
 import dash
+import gc
 import dash_bootstrap_components as dbc
 from dash import dcc, html
 from dash.dependencies import Input, Output, State, ALL, MATCH
@@ -25,7 +26,7 @@ server = app.server
 INPUT_FILE = 'dv_2020_a1.txt'
 
 try:
-    INPUT_DF = pd.read_csv(INPUT_FILE, sep=r'\s+')
+    INPUT_DF = pd.read_csv(INPUT_FILE, sep=r'\s+', low_memory=False)
 except FileNotFoundError:
     INPUT_DF = None
 BASELINE_CACHE = {}
@@ -459,7 +460,22 @@ def ensure_input_dataframe():
     """
     global INPUT_DF
     if INPUT_DF is None:
-        INPUT_DF = pd.read_csv(INPUT_FILE, sep=r'\s+')
+        df = pd.read_csv(INPUT_FILE, sep=r'\s+', low_memory=False)
+        int_cols = df.select_dtypes(include=['int64', 'int32', 'int16', 'int']).columns
+        float_cols = df.select_dtypes(include=['float64']).columns
+
+        if len(int_cols) > 0:
+            df[int_cols] = df[int_cols].apply(pd.to_numeric, downcast='integer')
+        if len(float_cols) > 0:
+            df[float_cols] = df[float_cols].apply(pd.to_numeric, downcast='float')
+
+        obj_cols = df.select_dtypes(include=['object']).columns
+        for col in obj_cols:
+            unique_values = df[col].nunique(dropna=False)
+            if 0 < unique_values < 256 and unique_values / len(df) < 0.5:
+                df[col] = df[col].astype('category')
+
+        INPUT_DF = df
     return INPUT_DF
 
 
@@ -474,8 +490,24 @@ def get_baseline_artifacts(df: pd.DataFrame, analysis_choice: int):
 
     baseline_sim_df = run_simulation(df, BASELINE_PARAMS)
     baseline_results, baseline_analysis_df = run_analysis(baseline_sim_df, analysis_choice)
-    BASELINE_CACHE[cache_key] = (baseline_sim_df, baseline_results, baseline_analysis_df)
-    return BASELINE_CACHE[cache_key]
+
+    cols_to_keep = ['idperson', 'deciles']
+    cols_to_keep.extend([col for col in baseline_analysis_df.columns if col.startswith('is') and 'HH' in col])
+    baseline_merge_df = baseline_analysis_df.loc[:, cols_to_keep].copy()
+
+    baseline_output_df = create_output_dataframe(baseline_sim_df.copy(deep=True))
+
+    artifacts = {
+        'results': baseline_results,
+        'merge_df': baseline_merge_df,
+        'output_df': baseline_output_df
+    }
+    BASELINE_CACHE[cache_key] = artifacts
+
+    del baseline_sim_df, baseline_analysis_df
+    gc.collect()
+
+    return artifacts
 
 
 # --- SIMULATION ENGINE ---
@@ -1645,7 +1677,10 @@ def run_and_display_results(n_clicks, analysis_choice, reform_name, generate_exc
             error_msg = dbc.Alert(f"Error loading '{INPUT_FILE}': {e}", color="danger")
             return [error_msg] * 11 + ["Error", "", dash.no_update]
 
-        baseline_sim_df, baseline_results, baseline_analysis_df = get_baseline_artifacts(df, analysis_choice)
+        baseline_artifacts = get_baseline_artifacts(df, analysis_choice)
+        baseline_results = baseline_artifacts['results']
+        baseline_analysis_df = baseline_artifacts['merge_df']
+        baseline_output_df = baseline_artifacts['output_df']
 
         reform_params = BASELINE_PARAMS.copy()
         user_reform_values = {}
@@ -1787,7 +1822,7 @@ def run_and_display_results(n_clicks, analysis_choice, reform_name, generate_exc
     if generate_excel:
         try:
             # Create dataframes for output
-            baseline_sim_df_out = create_output_dataframe(baseline_sim_df.copy(deep=True))
+            baseline_sim_df_out = baseline_output_df
             reform_sim_df_out = create_output_dataframe(reform_sim_df.copy(deep=True))
             
             # Format reform sheet name
