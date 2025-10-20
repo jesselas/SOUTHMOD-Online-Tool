@@ -495,12 +495,9 @@ def get_baseline_artifacts(df: pd.DataFrame, analysis_choice: int):
     cols_to_keep.extend([col for col in baseline_analysis_df.columns if col.startswith('is') and 'HH' in col])
     baseline_merge_df = baseline_analysis_df.loc[:, cols_to_keep].copy()
 
-    baseline_output_df = create_output_dataframe(baseline_sim_df.copy(deep=True))
-
     artifacts = {
         'results': baseline_results,
         'merge_df': baseline_merge_df,
-        'output_df': baseline_output_df
     }
     BASELINE_CACHE[cache_key] = artifacts
 
@@ -1309,7 +1306,7 @@ app.layout = dbc.Container([
                 "."
             ], style={"lineHeight": 1.5}),
         
-            html.P("This simulator allows you to run DEVMOD on the web. The outputs correspond to what DEVMOD produces when run and analysed in EUROMOD. Based on the model’s synthetic input dataset, you can run a baseline policy system for 2023, change parameters to create reform scenarios, and compare baseline and reform indicators for various distributional and budgetary outcomes – similar to the SOUTHMOD Statistics Presenter in EUROMOD. You can also export the results and simulated datasets to Excel.", style={"lineHeight": 1.5}),
+            html.P("This simulator allows you to run DEVMOD on the web. The outputs correspond to what DEVMOD produces when run and analysed in EUROMOD. Based on the model’s synthetic input dataset, you can run a baseline policy system for 2023, change parameters to create reform scenarios, and compare baseline and reform indicators for various distributional and budgetary outcomes – similar to the SOUTHMOD Statistics Presenter in EUROMOD. You can also export the results to Excel.", style={"lineHeight": 1.5}),
             html.P([
                 "DEVMOD follows standard SOUTHMOD conventions for identifiers, income variables, and policy functions, and supports simulations of direct and indirect taxes, social contributions, and cash benefits. It is maintained by UNU-WIDER as an accompanion to the SOUTHMOD bundle. Refer to the ",
                 html.A("SOUTHMOD User Manual", href="https://www.wider.unu.edu/sites/default/files/Projects/PDF/SOUTHMOD_UserManual_20250718.pdf", target="_blank"),
@@ -1491,6 +1488,22 @@ app.layout = dbc.Container([
 ], fluid=True, className="app-shell py-4")
 
 # --- CALLBACKS ---
+
+
+def warm_baseline_cache():
+    try:
+        df = ensure_input_dataframe()
+    except Exception:
+        return
+
+    for choice in (1, 2, 3, 4):
+        try:
+            get_baseline_artifacts(df, choice)
+        except Exception:
+            continue
+
+
+warm_baseline_cache()
 
 # Baseline parameters modal callback
 @app.callback(
@@ -1680,7 +1693,6 @@ def run_and_display_results(n_clicks, analysis_choice, reform_name, generate_exc
         baseline_artifacts = get_baseline_artifacts(df, analysis_choice)
         baseline_results = baseline_artifacts['results']
         baseline_analysis_df = baseline_artifacts['merge_df']
-        baseline_output_df = baseline_artifacts['output_df']
 
         reform_params = BASELINE_PARAMS.copy()
         user_reform_values = {}
@@ -1821,14 +1833,6 @@ def run_and_display_results(n_clicks, analysis_choice, reform_name, generate_exc
     
     if generate_excel:
         try:
-            # Create dataframes for output
-            baseline_sim_df_out = baseline_output_df
-            reform_sim_df_out = create_output_dataframe(reform_sim_df.copy(deep=True))
-            
-            # Format reform sheet name
-            scenario_stub = (reform_name or "Reform").replace(' ', '_')
-            ref_sheet_name = f"RefData_{scenario_stub}"[:31]
-            base_sheet_name = "BaseData"
             generation_dt = datetime.now()
             generation_date = generation_dt.strftime("%Y-%m-%d_%H-%M")
             generation_display = generation_dt.strftime("%Y-%m-%d %H:%M")
@@ -1954,10 +1958,6 @@ def run_and_display_results(n_clicks, analysis_choice, reform_name, generate_exc
                 placeholder_df = pd.DataFrame(["Output for this tab is under development."])
                 for sheet in placeholder_sheets:
                     placeholder_df.to_excel(writer, sheet_name=sheet, index=False, header=False)
-
-                # Data sheets at the end
-                baseline_sim_df_out.to_excel(writer, sheet_name=base_sheet_name, index=False)
-                reform_sim_df_out.to_excel(writer, sheet_name=ref_sheet_name, index=False)
 
                 wb = writer.book
                 info_ws = wb['Info']
