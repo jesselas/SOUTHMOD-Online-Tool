@@ -24,6 +24,12 @@ server = app.server
 # --- DATA LOADING ---
 INPUT_FILE = 'dv_2020_a1.txt'
 
+try:
+    INPUT_DF = pd.read_csv(INPUT_FILE, sep=r'\s+')
+except FileNotFoundError:
+    INPUT_DF = None
+BASELINE_CACHE = {}
+
 # --- VAT ITEM DEFINITIONS ---
 # Dictionary mapping item codes to labels and baseline status
 VAT_ITEM_MAP = {
@@ -444,6 +450,32 @@ def extract_description_lines(info_key: str):
             if plain_text:
                 lines.append(('body', plain_text))
     return lines
+
+
+def ensure_input_dataframe():
+    """
+    Loads the input micro-data once and reuses it across requests to avoid
+    repeated disk I/O on resource-constrained hosts (e.g. Render free tier).
+    """
+    global INPUT_DF
+    if INPUT_DF is None:
+        INPUT_DF = pd.read_csv(INPUT_FILE, sep=r'\s+')
+    return INPUT_DF
+
+
+def get_baseline_artifacts(df: pd.DataFrame, analysis_choice: int):
+    """
+    Returns cached baseline simulation results for the selected distribution statistic.
+    This prevents recomputing the heavy baseline run on every callback.
+    """
+    cache_key = analysis_choice
+    if cache_key in BASELINE_CACHE:
+        return BASELINE_CACHE[cache_key]
+
+    baseline_sim_df = run_simulation(df, BASELINE_PARAMS)
+    baseline_results, baseline_analysis_df = run_analysis(baseline_sim_df, analysis_choice)
+    BASELINE_CACHE[cache_key] = (baseline_sim_df, baseline_results, baseline_analysis_df)
+    return BASELINE_CACHE[cache_key]
 
 
 # --- SIMULATION ENGINE ---
@@ -1601,19 +1633,19 @@ def run_and_display_results(n_clicks, analysis_choice, reform_name, generate_exc
         analysis_choice = 3
 
     try:
-        # Load data from the local input file
         try:
-            df = pd.read_csv(INPUT_FILE, sep=r'\s+')
+            df = ensure_input_dataframe()
         except FileNotFoundError:
-            error_msg = dbc.Alert(f"Error: Input file '{INPUT_FILE}' not found in the application folder.", color="danger")
+            error_msg = dbc.Alert(
+                f"Error: Input file '{INPUT_FILE}' not found in the application folder.",
+                color="danger"
+            )
             return [error_msg] * 11 + ["Error", "", dash.no_update]
         except Exception as e:
             error_msg = dbc.Alert(f"Error loading '{INPUT_FILE}': {e}", color="danger")
             return [error_msg] * 11 + ["Error", "", dash.no_update]
 
-        
-        baseline_sim_df = run_simulation(df, BASELINE_PARAMS)
-        baseline_results, baseline_analysis_df = run_analysis(baseline_sim_df, analysis_choice)
+        baseline_sim_df, baseline_results, baseline_analysis_df = get_baseline_artifacts(df, analysis_choice)
 
         reform_params = BASELINE_PARAMS.copy()
         user_reform_values = {}
@@ -1755,8 +1787,8 @@ def run_and_display_results(n_clicks, analysis_choice, reform_name, generate_exc
     if generate_excel:
         try:
             # Create dataframes for output
-            baseline_sim_df_out = create_output_dataframe(baseline_sim_df)
-            reform_sim_df_out = create_output_dataframe(reform_sim_df)
+            baseline_sim_df_out = create_output_dataframe(baseline_sim_df.copy(deep=True))
+            reform_sim_df_out = create_output_dataframe(reform_sim_df.copy(deep=True))
             
             # Format reform sheet name
             scenario_stub = (reform_name or "Reform").replace(' ', '_')
