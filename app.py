@@ -1251,9 +1251,6 @@ app.layout = dbc.Container([
     dbc.Modal([
         dbc.ModalHeader(dbc.ModalTitle("Baseline parameters (2023)")),
         dbc.ModalBody([
-            *create_baseline_param_section("Indirect taxes", {
-                'Standard VAT rate, %/100': BASELINE_PARAMS['tva_rate'],
-            }),
             *create_baseline_param_section("Personal income tax", {
                 'Self-employment income threshold (presumptive maximum), annual': BASELINE_PARAMS['pit_yse_turnover_threshold'],
                 'Exemption on agricultural income, annual': BASELINE_PARAMS['pit_yag_exemption'],
@@ -1279,6 +1276,9 @@ app.layout = dbc.Container([
             *create_baseline_param_section("Presumptive tax for small enterprises", {
                 'Lower threshold, annual': BASELINE_PARAMS['presumptive_turnover_3'],
                 'Tax rate, %/100': BASELINE_PARAMS['presumptive_rate_4'],
+            }),
+            *create_baseline_param_section("Value-added tax (VAT)", {
+                'Standard VAT rate, %/100': BASELINE_PARAMS['tva_rate'],
             }),
             *create_baseline_param_section("Social assistance benefit", {
                 'Income threshold, monthly': BASELINE_PARAMS['bsa_income_threshold'],
