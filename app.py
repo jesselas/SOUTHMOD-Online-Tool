@@ -20,6 +20,7 @@ from openpyxl.utils import get_column_letter
 # --- APPLICATION INITIALIZATION ---
 # Use a Bootstrap theme for a clean layout
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
+app.title = "DEVMOD Online"
 server = app.server
 
 # --- DATA LOADING ---
