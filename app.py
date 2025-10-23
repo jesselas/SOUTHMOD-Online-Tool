@@ -1148,6 +1148,16 @@ def create_styled_table(data_dict, title, subtitle):
         dbc.Table(header + body, bordered=True, hover=True, responsive=True, className="table-sm")
     ]
 
+
+def format_signed_value(val):
+    if pd.isna(val):
+        return val
+    if val > 0:
+        return f"+{val:,.2f}"
+    if val < 0:
+        return f"{val:,.2f}"
+    return "0.00"
+
 # Helper for building baseline parameter modal sections
 def create_baseline_param_section(title, params_dict):
     """Creates a formatted section for the baseline parameters modal."""
@@ -1341,15 +1351,15 @@ app.layout = dbc.Container([
         dbc.Col(
             html.Div([
                 html.Div([
-                    html.H1("SOUTHMOD online tool", className="app-title-heading"),
+                    html.H1("SOUTHMOD Online Tool", className="app-title-heading"),
                     html.P("DEVMOD reform analysis dashboard", className="app-title-subheading")
                 ], className="app-title"),
                 dbc.Card([
                     dbc.CardBody([
                 html.Div([
                     dbc.Row([
-                        dbc.Col(dbc.Button("Baseline parameters", id="view-baseline-button", color="secondary", outline=True, size="sm", className="w-100 btn-baseline"), width=6),
                         dbc.Col(dbc.Button("DEVMOD info", id="view-devmod-button", color="secondary", outline=True, size="sm", className="w-100 btn-baseline"), width=6),
+                        dbc.Col(dbc.Button("Baseline parameters", id="view-baseline-button", color="secondary", outline=True, size="sm", className="w-100 btn-baseline"), width=6),
                     ], className="g-2 mb-3"),
                     html.Div([
                         make_control_step("1", "Name your reform scenario"),
@@ -1359,8 +1369,28 @@ app.layout = dbc.Container([
                         
                         make_control_step("2", "Configure reform parameters"),
                         dbc.Accordion([
-                            # Indirect taxes accordion item
-                    dbc.AccordionItem([
+                            dbc.AccordionItem([
+                                html.P("Personal income tax", className="accordion-section-title"),
+                                make_param_input("Self-employment income threshold (presumptive maximum), annual", 'pit_yse_turnover_threshold', BASELINE_PARAMS['pit_yse_turnover_threshold']), 
+                                make_param_input("Exemption on agricultural income, annual", 'pit_yag_exemption', BASELINE_PARAMS['pit_yag_exemption']), 
+                                html.Hr(),
+                                make_pit_table(BASELINE_PARAMS),
+                                html.Hr(), 
+                                html.P("Social insurance contributions", className="accordion-section-title"),
+                                make_param_input("Employee SIC rate, %/100", 'tscee_rate', BASELINE_PARAMS['tscee_rate'], 0.01), 
+                                make_param_input("Employer SIC rate, %/100", 'tscer_rate', BASELINE_PARAMS['tscer_rate'], 0.01),
+                                html.Hr(),
+                                html.P("Presumptive tax for micro enterprises", className="accordion-section-title"),
+                                make_param_input("Band 2 (non-zero tax) lower threshold, annual", 'presumptive_turnover_1', BASELINE_PARAMS['presumptive_turnover_1']), 
+                                make_param_input("Band 2 tax amount, annual", 'presumptive_tax_2', BASELINE_PARAMS['presumptive_tax_2']), 
+                                make_param_input("Band 3 lower threshold, annual", 'presumptive_turnover_2', BASELINE_PARAMS['presumptive_turnover_2']), 
+                                make_param_input("Band 3 tax amount, annual", 'presumptive_tax_3', BASELINE_PARAMS['presumptive_tax_3']), 
+                                html.Hr(),
+                                html.P("Presumptive tax for small enterprises", className="accordion-section-title"),
+                                make_param_input("Lower threshold, annual", 'presumptive_turnover_3', BASELINE_PARAMS['presumptive_turnover_3']), 
+                        make_param_input("Tax rate, %/100", 'presumptive_rate_4', BASELINE_PARAMS['presumptive_rate_4'], 0.01)
+                            ], title="Direct taxes"),
+                            dbc.AccordionItem([
                         html.P("Value-added tax (VAT)", className="accordion-section-title"),
                         make_param_input("Standard VAT rate, %/100", 'tva_rate', BASELINE_PARAMS['tva_rate'], 0.01),
                         html.Hr(),
@@ -1379,34 +1409,6 @@ app.layout = dbc.Container([
                                     labelStyle={'display': 'block', 'font-size': '0.9rem', 'marginLeft': '0.4rem'}
                                 )
                             ], title="Indirect taxes"),
-                            
-                            # Personal income tax and contributions
-                            dbc.AccordionItem([
-                                html.P("Personal income tax", className="accordion-section-title"),
-                                make_param_input("Self-employment income threshold (presumptive maximum), annual", 'pit_yse_turnover_threshold', BASELINE_PARAMS['pit_yse_turnover_threshold']), 
-                                make_param_input("Exemption on agricultural income, annual", 'pit_yag_exemption', BASELINE_PARAMS['pit_yag_exemption']), 
-                                html.Hr(),
-                                make_pit_table(BASELINE_PARAMS),
-                                html.Hr(), 
-                                html.P("Social insurance contributions", className="accordion-section-title"),
-                                make_param_input("Employee SIC rate, %/100", 'tscee_rate', BASELINE_PARAMS['tscee_rate'], 0.01), 
-                                make_param_input("Employer SIC rate, %/100", 'tscer_rate', BASELINE_PARAMS['tscer_rate'], 0.01),
-                            ], title="Personal income tax & contributions"),
-                            
-                            # Presumptive tax inputs
-                            dbc.AccordionItem([
-                                html.P("Presumptive tax for micro enterprises", className="accordion-section-title"),
-                                make_param_input("Band 2 (non-zero tax) lower threshold, annual", 'presumptive_turnover_1', BASELINE_PARAMS['presumptive_turnover_1']), 
-                                make_param_input("Band 2 tax amount, annual", 'presumptive_tax_2', BASELINE_PARAMS['presumptive_tax_2']), 
-                                make_param_input("Band 3 lower threshold, annual", 'presumptive_turnover_2', BASELINE_PARAMS['presumptive_turnover_2']), 
-                                make_param_input("Band 3 tax amount, annual", 'presumptive_tax_3', BASELINE_PARAMS['presumptive_tax_3']), 
-                                html.Hr(),
-                                html.P("Presumptive tax for small enterprises", className="accordion-section-title"),
-                                make_param_input("Lower threshold, annual", 'presumptive_turnover_3', BASELINE_PARAMS['presumptive_turnover_3']), 
-                        make_param_input("Tax rate, %/100", 'presumptive_rate_4', BASELINE_PARAMS['presumptive_rate_4'], 0.01)
-                            ], title="Presumptive tax"),
-                            
-                            # Benefit policy inputs
                             dbc.AccordionItem([
                                 html.P("Social assistance", className="accordion-section-title"),
                                 make_param_input("Eligibility income threshold, monthly", 'bsa_income_threshold', BASELINE_PARAMS['bsa_income_threshold']), 
@@ -1566,10 +1568,9 @@ def normalize_param_inputs(current_value, dec_clicks, inc_clicks, component_id):
     ctx = dash.callback_context
     if not ctx.triggered:
         return dash.no_update
-    trigger = ctx.triggered[0]['prop_id']
-    if trigger.endswith('n_clicks'):
-        trigger_payload = json.loads(trigger.split('.')[0])
-        direction = trigger_payload.get('direction')
+    triggered_id = getattr(ctx, "triggered_id", None)
+    if isinstance(triggered_id, dict) and 'direction' in triggered_id:
+        direction = triggered_id.get('direction')
         if direction not in {'inc', 'dec'}:
             return dash.no_update
         step = meta.get('step', 1)
@@ -1583,6 +1584,7 @@ def normalize_param_inputs(current_value, dec_clicks, inc_clicks, component_id):
         if not meta.get('allow_negative', False) and new_value < 0:
             new_value = 0
         return format_param_value(param_id, new_value)
+    trigger = ctx.triggered[0]['prop_id']
     if isinstance(current_value, str):
         stripped = current_value.strip()
         if stripped == "":
@@ -1667,10 +1669,10 @@ def toggle_info_modal(info_clicks, close_click, is_open):
 )
 def run_and_display_results(n_clicks, analysis_choice, reform_name, generate_excel, 
                             param_ids, param_values, vat_checklist_value):    
-   
+    dev_placeholder = html.Div(dbc.Alert("Output for this tab is under development.", color="info"), className="p-4")
+    run_placeholder = html.Div(dbc.Alert("Run a simulation to see results.", color="info"), className="p-4")
     if not n_clicks:
-        placeholder = html.Div(dbc.Alert("Run a simulation to see results.", color="info"), className="p-4")
-        return [placeholder] * 11 + ["", "", dash.no_update]
+        return [run_placeholder, run_placeholder] + [dev_placeholder] * 9 + ["", "", dash.no_update]
 
     try:
         analysis_choice = int(analysis_choice)
@@ -1740,6 +1742,8 @@ def run_and_display_results(n_clicks, analysis_choice, reform_name, generate_exc
     if 'Component' in abs_df.columns:
         abs_df = abs_df.rename(columns={'Component': ''})
     abs_df['Difference'] = abs_df.apply(lambda row: row['Reform'] - row['Baseline'] if pd.notna(row['Reform']) and pd.notna(row['Baseline']) else None, axis=1)
+    abs_df_excel = abs_df.copy()
+    abs_df['Difference'] = abs_df['Difference'].apply(format_signed_value)
     tab1_part1 = create_styled_table(abs_df.to_dict('list'), "Total revenue and expenditure", "(yearly, millions of national currency)")
 
     share_rows = ['By source', '- Direct taxes', '- Social insurance contributions', '- Indirect taxes',
@@ -1758,6 +1762,8 @@ def run_and_display_results(n_clicks, analysis_choice, reform_name, generate_exc
     if 'Component' in share_df.columns:
         share_df = share_df.rename(columns={'Component': ''})
     share_df['Difference (pp.)'] = share_df.apply(lambda row: row['Reform (%)'] - row['Baseline (%)'] if pd.notna(row['Reform (%)']) and pd.notna(row['Baseline (%)']) else None, axis=1)
+    share_df_excel = share_df.copy()
+    share_df['Difference (pp.)'] = share_df['Difference (pp.)'].apply(format_signed_value)
     tab1_part2 = create_styled_table(share_df.to_dict('list'), "Shares of total revenue and expenditure", "(%)")
     tab1_content = tab1_part1 + tab1_part2
 
@@ -1817,6 +1823,10 @@ def run_and_display_results(n_clicks, analysis_choice, reform_name, generate_exc
         
     pov_rate_df['Difference (pp.)'] = pov_rate_df.apply(calc_diff, axis=1)
     pov_gap_df['Difference (pp.)'] = pov_gap_df.apply(calc_diff, axis=1)
+    pov_rate_df_excel = pov_rate_df.copy()
+    pov_gap_df_excel = pov_gap_df.copy()
+    pov_rate_df['Difference (pp.)'] = pov_rate_df['Difference (pp.)'].apply(format_signed_value)
+    pov_gap_df['Difference (pp.)'] = pov_gap_df['Difference (pp.)'].apply(format_signed_value)
 
     # Display poverty line as a yearly value
     povline_text = f"Absolute national poverty line used (yearly): {baseline_results['poverty']['povline']*12:,.2f}"
@@ -1826,7 +1836,7 @@ def run_and_display_results(n_clicks, analysis_choice, reform_name, generate_exc
                    [dbc.Alert(povline_text, color="secondary", className="mt-3")]
 
     # --- Placeholder tabs ---
-    placeholder_content = [html.Div(dbc.Alert("Output for this tab is under development.", color="info"), className="p-4")]
+    placeholder_content = [dev_placeholder]
     
     # --- Prepare Download Data ---
     download_output = dash.no_update
@@ -1903,12 +1913,12 @@ def run_and_display_results(n_clicks, analysis_choice, reform_name, generate_exc
 
                 table_specs = [
                     ('TaxBenPolicy', 'taxbenpol', [
-                        (abs_df, "Total revenue and expenditure (yearly, millions of national currency)."),
-                        (share_df, "Shares of total revenue and expenditure (%)."),
+                        (abs_df_excel, "Total revenue and expenditure (yearly, millions of national currency).", ["Difference"]),
+                        (share_df_excel, "Shares of total revenue and expenditure (%).", ["Difference (pp.)"]),
                     ]),
                     ('Poverty', 'poverty', [
-                        (pov_rate_df, "Poverty rate (share of poor population, %)."),
-                        (pov_gap_df, "Poverty gap (average normalised poverty gap, %)."),
+                        (pov_rate_df_excel, "Poverty rate (share of poor population, %).", ["Difference (pp.)"]),
+                        (pov_gap_df_excel, "Poverty gap (average normalised poverty gap, %).", ["Difference (pp.)"]),
                     ]),
                 ]
 
@@ -1924,17 +1934,24 @@ def run_and_display_results(n_clicks, analysis_choice, reform_name, generate_exc
                         'description_lines': description_lines,
                     }
                     start_row = 0
-                    for df, note in tables:
+                    for df_excel, note, diff_columns in tables:
                         title_row = start_row + 1
                         subtitle_row = start_row + 2
                         data_start = start_row + 3
 
                         ws = writer.sheets.get(sheet_name)
                         if ws is None:
-                            df.to_excel(writer, sheet_name=sheet_name, index=False, startrow=data_start)
+                            df_excel.to_excel(writer, sheet_name=sheet_name, index=False, startrow=data_start)
                             ws = writer.sheets[sheet_name]
                         else:
-                            df.to_excel(writer, sheet_name=sheet_name, index=False, startrow=data_start)
+                            df_excel.to_excel(writer, sheet_name=sheet_name, index=False, startrow=data_start)
+
+                        for col_idx, col_name in enumerate(df_excel.columns, start=1):
+                            if col_name in diff_columns:
+                                for row_idx in range(data_start + 1, data_start + df_excel.shape[0] + 1):
+                                    cell = ws.cell(row=row_idx, column=col_idx)
+                                    cell.alignment = Alignment(horizontal='right')
+                                    cell.number_format = "+0.00;-0.00;0.00"
 
                         title_cell = ws.cell(row=title_row, column=1, value=note.split(' (')[0])
                         title_cell.font = Font(bold=True, italic=True, size=13, color="000000")
@@ -1945,11 +1962,11 @@ def run_and_display_results(n_clicks, analysis_choice, reform_name, generate_exc
                             'start_row': data_start,
                             'title_row': title_row,
                             'subtitle_row': subtitle_row,
-                            'col_count': df.shape[1],
-                            'row_count': df.shape[0] + 1,
+                            'col_count': df_excel.shape[1],
+                            'row_count': df_excel.shape[0] + 1,
                             'note': note,
                         })
-                        start_row = data_start + df.shape[0] + 4
+                        start_row = data_start + df_excel.shape[0] + 4
 
                 # Placeholder tabs
                 placeholder_sheets = ['Households', 'Individuals', 'Poverty_Graphs', 
