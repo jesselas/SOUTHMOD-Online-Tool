@@ -31,6 +31,7 @@ try:
 except FileNotFoundError:
     INPUT_DF = None
 BASELINE_CACHE = {}
+DEFAULT_REFORM_NAME = "My reform"
 
 # --- VAT ITEM DEFINITIONS ---
 # Dictionary mapping item codes to labels and baseline status
@@ -173,8 +174,119 @@ PARAM_INPUT_META = {
     'senior_grant_age': {'precision': 0, 'thousands': False, 'force_int': True, 'step': 1},
     'senior_grant_income_threshold': {'precision': 2, 'thousands': True, 'step': 1},
     'senior_grant_amount': {'precision': 2, 'thousands': True, 'step': 1},
+    'school_meal_age': {'precision': 0, 'force_int': True, 'step': 1},
     'school_meal_value': {'precision': 2, 'thousands': True, 'step': 1},
 }
+
+POLICY_PARAM_SECTIONS = [
+    {
+        'title': 'Personal income tax',
+        'prefix': 'Personal income tax – ',
+        'items': [
+            ('pit_yse_turnover_threshold', 'Self-employment income threshold (presumptive maximum), annual'),
+            ('pit_yag_exemption', 'Exemption on agricultural income, annual'),
+            ('pit_bracket2_thresh', 'Bracket 2 lower threshold, annual'),
+            ('pit_bracket2_rate', 'Bracket 2 progressive rate, %/100'),
+            ('pit_bracket3_thresh', 'Bracket 3 lower threshold, annual'),
+            ('pit_bracket3_rate', 'Bracket 3 progressive rate, %/100'),
+            ('pit_bracket4_thresh', 'Bracket 4 lower threshold, annual'),
+            ('pit_bracket4_rate', 'Bracket 4 progressive rate, %/100'),
+            ('pit_bracket5_thresh', 'Bracket 5 lower threshold, annual'),
+            ('pit_bracket5_rate', 'Bracket 5 progressive rate, %/100'),
+        ],
+    },
+    {
+        'title': 'Social insurance contributions',
+        'prefix': 'Social insurance contributions – ',
+        'items': [
+            ('tscee_rate', 'Employee contribution rate, %/100'),
+            ('tscer_rate', 'Employer contribution rate, %/100'),
+        ],
+    },
+    {
+        'title': 'Presumptive tax for micro enterprises',
+        'prefix': 'Presumptive tax for micro enterprises – ',
+        'items': [
+            ('presumptive_turnover_1', 'Band 2 lower threshold, annual'),
+            ('presumptive_tax_2', 'Band 2 tax amount, annual'),
+            ('presumptive_turnover_2', 'Band 3 lower threshold, annual'),
+            ('presumptive_tax_3', 'Band 3 tax amount, annual'),
+        ],
+    },
+    {
+        'title': 'Presumptive tax for small enterprises',
+        'prefix': 'Presumptive tax for small enterprises – ',
+        'items': [
+            ('presumptive_turnover_3', 'Lower threshold, annual'),
+            ('presumptive_rate_4', 'Tax rate, %/100'),
+        ],
+    },
+    {
+        'title': 'Value-added tax (VAT)',
+        'prefix': 'Value-added tax (VAT) – ',
+        'items': [
+            ('tva_rate', 'Standard VAT rate, %/100'),
+        ],
+    },
+    {
+        'title': 'Social assistance benefit',
+        'prefix': 'Social assistance – ',
+        'items': [
+            ('bsa_income_threshold', 'Income threshold, monthly'),
+            ('bsa_1_person', 'Benefit amount (1-person household), monthly'),
+            ('bsa_2_person', 'Benefit amount (2-person household), monthly'),
+            ('bsa_3_plus_person', 'Benefit amount (3+-person household), monthly'),
+            ('bsa_disabled_topup', 'Disability top-up, monthly'),
+        ],
+    },
+    {
+        'title': "Senior citizens' grant",
+        'prefix': 'Senior grant – ',
+        'items': [
+            ('senior_grant_age', 'Eligibility age threshold'),
+            ('senior_grant_income_threshold', 'Eligibility income threshold, monthly'),
+            ('senior_grant_amount', 'Grant amount, monthly'),
+        ],
+    },
+    {
+        'title': 'School meals (in-kind)',
+        'prefix': 'School meals (in-kind) – ',
+        'items': [
+            ('school_meal_age', 'School meal age threshold'),
+            ('school_meal_value', 'School meal value, monthly'),
+        ],
+    },
+]
+
+POLICY_PARAM_LOOKUP = {
+    param_id: {
+        'label': label,
+        'section': section['title'],
+        'prefix': section.get('prefix', '')
+    }
+    for section in POLICY_PARAM_SECTIONS
+    for (param_id, label) in section['items']
+}
+
+def policy_values_equal(param_id, baseline_value, reform_value, tol=1e-9):
+    if baseline_value is None and reform_value is None:
+        return True
+    if baseline_value is None or reform_value is None:
+        return False
+    if isinstance(baseline_value, (int, float)) and isinstance(reform_value, (int, float)):
+        return np.isclose(float(baseline_value), float(reform_value), atol=tol)
+    return str(baseline_value) == str(reform_value)
+
+def format_policy_value(param_id, value):
+    if value is None:
+        return "n/a"
+    if param_id in POLICY_PARAM_LOOKUP:
+        formatted = format_param_value(param_id, value)
+        return formatted if formatted else "0"
+    if isinstance(value, (int, float)):
+        formatted = f"{value:,.4f}".rstrip('0').rstrip('.')
+        return formatted if formatted else "0"
+    return str(value)
 
 def get_param_meta(param_id: str) -> dict:
     base_meta = {
@@ -1181,6 +1293,66 @@ def create_baseline_param_section(title, params_dict):
     # 2. Return a single, flat list using list concatenation
     return [html.H5(title, className="mt-3")] + rows + [html.Hr()]
 
+def create_policy_changes_section(title, rows, notes=None):
+    """Builds policy change section content for the modal."""
+    if notes is None:
+        notes = []
+    section_children = [html.H5(title, className="mt-3")]
+
+    for row in rows:
+        value_classes = ["policy-change-value"]
+        if row.get('changed'):
+            value_classes.append("policy-change-value-changed")
+        else:
+            value_classes.append("policy-change-value-unchanged")
+        display_value = row.get('display_value', '')
+        label_text = row.get('label', '')
+        section_children.append(
+            dbc.Row([
+                dbc.Col(
+                    html.Span(display_value, className=" ".join(value_classes)),
+                    width="auto",
+                ),
+                dbc.Col(html.Strong(label_text, className="policy-change-label"), width=True)
+            ], className="align-items-center mb-1 policy-change-row")
+        )
+
+    for note in notes:
+        note_classes = ["policy-change-note"]
+        if note.get('changed'):
+            note_classes.append("policy-change-note-changed")
+        else:
+            note_classes.append("policy-change-note-unchanged")
+        note_text = note.get('text', '')
+        section_children.append(
+            dbc.Row([
+                dbc.Col(html.Span(note_text, className=" ".join(note_classes)), width=12)
+            ], className="mb-1 policy-change-note-row")
+        )
+
+    section_children.append(html.Hr())
+    return section_children
+
+def build_policy_changes_modal_body(policy_data):
+    """Returns the body components for the policy changes modal."""
+    sections = policy_data.get('sections', []) if policy_data else []
+    no_changes = policy_data.get('no_changes') if policy_data else False
+
+    body_children = []
+    if no_changes:
+        return [html.H5("No policy changes", className="policy-no-changes-header mt-3 mb-2")]
+
+    for section in sections:
+        section_title = section.get('title', '')
+        rows = section.get('rows', [])
+        notes = section.get('notes', [])
+        body_children.extend(create_policy_changes_section(section_title, rows, notes))
+
+    if body_children and isinstance(body_children[-1], html.Hr):
+        body_children = body_children[:-1]
+
+    return body_children
+
 # Helper to create consistent output dataframes
 def create_output_dataframe(sim_df):
     """Selects, orders, and formats columns for the output file."""
@@ -1229,15 +1401,27 @@ def make_tab(label_text: str, info_index: str, content_div_id: str) -> dbc.Tab:
         label=label_text,  # <-- string only
         children=[
             html.Div(
-                dbc.Button(
-                    "Description of tab's indicators",
-                    id={'type': 'info-button', 'index': info_index},
-                    color="secondary",
-                    outline=True,
-                    size="sm",
-                    className="info-button btn-description",
-                ),
-                className="tab-info-wrapper d-flex justify-content-start mb-2"
+                [
+                    dbc.Button(
+                        "Description of tab's indicators",
+                        id={'type': 'info-button', 'index': info_index},
+                        color="secondary",
+                        outline=True,
+                        size="sm",
+                        className="info-button btn-description",
+                    ),
+                    dbc.Button(
+                        "Policy changes",
+                        id={'type': 'policy-changes-button', 'index': info_index},
+                        color="secondary",
+                        outline=True,
+                        size="sm",
+                        className="info-button btn-description btn-policy-changes",
+                        style={'display': 'none'},
+                        disabled=True,
+                    ),
+                ],
+                className="tab-info-wrapper d-flex align-items-center gap-2 mb-2"
             ),
             html.Div(id=content_div_id),
         ],
@@ -1247,6 +1431,7 @@ def make_tab(label_text: str, info_index: str, content_div_id: str) -> dbc.Tab:
 # --- APP LAYOUT ---
 app.layout = dbc.Container([
     dcc.Download(id='download-simulation-output'),
+    dcc.Store(id='policy-changes-data'),
 
     # Baseline Parameters Modal
     dbc.Modal([
@@ -1288,14 +1473,14 @@ app.layout = dbc.Container([
                 'Benefit amount (3+-person household), monthly': BASELINE_PARAMS['bsa_3_plus_person'],
                 'Disability top-up, monthly': BASELINE_PARAMS['bsa_disabled_topup'],
             }),
-             *create_baseline_param_section("Senior citizens' grant", {
-                'Age limit': BASELINE_PARAMS['senior_grant_age'],
-                'Income threshold, monthly': BASELINE_PARAMS['senior_grant_income_threshold'],
+            *create_baseline_param_section("Senior citizens' grant", {
+                'Eligibility age threshold': BASELINE_PARAMS['senior_grant_age'],
+                'Eligibility income threshold, monthly': BASELINE_PARAMS['senior_grant_income_threshold'],
                 'Grant amount, monthly': BASELINE_PARAMS['senior_grant_amount'],
             }),
-             *create_baseline_param_section("School meals", {
-                'Maximum age': BASELINE_PARAMS['school_meal_age'],
-                'Meal value, monthly': BASELINE_PARAMS['school_meal_value'],
+            *create_baseline_param_section("School meals (in-kind)", {
+                'School meal age threshold': BASELINE_PARAMS['school_meal_age'],
+                'School meal value, monthly': BASELINE_PARAMS['school_meal_value'],
             }),
             *create_baseline_param_section("Poverty lines", {
                 'Basic poverty line, monthly': BASELINE_PARAMS['basic_pov_line'],
@@ -1346,6 +1531,11 @@ app.layout = dbc.Container([
         dbc.ModalBody(dcc.Markdown(id="info-modal-body", dangerously_allow_html=True), className="info-modal-body"),
         dbc.ModalFooter(dbc.Button("Close", id="close-info-modal", className="ms-auto"))
     ], id="info-modal", is_open=False, size="lg", scrollable=True),
+    dbc.Modal([
+        dbc.ModalHeader(dbc.ModalTitle(id="policy-changes-modal-title")),
+        dbc.ModalBody(html.Div(id="policy-changes-modal-body"), className="policy-changes-modal-body"),
+        dbc.ModalFooter(dbc.Button("Close", id="close-policy-changes-modal", className="ms-auto"))
+    ], id="policy-changes-modal", is_open=False, size="lg", scrollable=True, className="baseline-modal"),
 
     # Primary layout: controls column and results column
     dbc.Row([
@@ -1364,7 +1554,7 @@ app.layout = dbc.Container([
                     ], className="g-2 mb-3"),
                     html.Div([
                         make_control_step("1", "Name your reform scenario"),
-                        dcc.Input(id='reform-name-input', placeholder='Enter reform scenario name...', value='My reform', type='text', className="form-control modern-input"),
+                        dcc.Input(id='reform-name-input', placeholder='Enter reform scenario name...', value=DEFAULT_REFORM_NAME, type='text', className="form-control modern-input"),
                     ], className="mb-3"),
                 ]),
                         
@@ -1423,7 +1613,8 @@ app.layout = dbc.Container([
                                 make_param_input("Eligibility income threshold, monthly", 'senior_grant_income_threshold', BASELINE_PARAMS['senior_grant_income_threshold']), 
                                 make_param_input("Senior grant amount, monthly", 'senior_grant_amount', BASELINE_PARAMS['senior_grant_amount']), 
                                 html.Hr(), 
-                                html.P("In-kind benefits", className="accordion-section-title"),
+                                html.P("School meals (in-kind)", className="accordion-section-title"),
+                                make_param_input("School meal age threshold", 'school_meal_age', BASELINE_PARAMS['school_meal_age']),
                                 make_param_input("School meal value, monthly", 'school_meal_value', BASELINE_PARAMS['school_meal_value'])
                             ], title="Benefit policies"),
                         ], start_collapsed=True, className="mb-3"),
@@ -1450,7 +1641,9 @@ app.layout = dbc.Container([
                     ], className="modern-card-body")
                 ], className="modern-card shadow-sm border-0 control-card")
             ], className="left-column d-flex flex-column gap-3"),
-            width=4
+            xs=12,
+            lg=4,
+            className="layout-left-col"
         ),
 
         dbc.Col(
@@ -1484,10 +1677,11 @@ app.layout = dbc.Container([
                 ], className="modern-card-body"),
                 className="modern-card shadow-sm border-0 results-card"
             ),
-            width=8,
-            className="modern-results-panel"
+            xs=12,
+            lg=8,
+            className="layout-right-col modern-results-panel"
         )
-    ], className="g-4 align-items-start")
+    ], className="layout-row g-4 align-items-start")
 ], fluid=True, className="app-shell py-4")
 
 # --- CALLBACKS ---
@@ -1659,6 +1853,7 @@ def toggle_info_modal(info_clicks, close_click, is_open):
       'policy-effects', 'gainers-losers']],
     Output('loading-output', 'children'),
     Output('results-title', 'children'),  # Title for the results card
+    Output('policy-changes-data', 'data'),
     Output('download-simulation-output', 'data'),  # Excel download payload
     Input('run-button', 'n_clicks'),
     State('analysis-choice', 'value'),
@@ -1673,7 +1868,7 @@ def run_and_display_results(n_clicks, analysis_choice, reform_name, generate_exc
     dev_placeholder = html.Div(dbc.Alert("Output for this tab is under development.", color="info"), className="p-4")
     run_placeholder = html.Div(dbc.Alert("Run a simulation to see results.", color="info"), className="p-4")
     if not n_clicks:
-        return [run_placeholder, run_placeholder] + [dev_placeholder] * 9 + ["", "", dash.no_update]
+        return [run_placeholder, run_placeholder] + [dev_placeholder] * 9 + ["", "", None, dash.no_update]
 
     try:
         analysis_choice = int(analysis_choice)
@@ -1688,10 +1883,10 @@ def run_and_display_results(n_clicks, analysis_choice, reform_name, generate_exc
                 f"Error: Input file '{INPUT_FILE}' not found in the application folder.",
                 color="danger"
             )
-            return [error_msg] * 11 + ["Error", "", dash.no_update]
+            return [error_msg] * 11 + ["Error", "", None, dash.no_update]
         except Exception as e:
             error_msg = dbc.Alert(f"Error loading '{INPUT_FILE}': {e}", color="danger")
-            return [error_msg] * 11 + ["Error", "", dash.no_update]
+            return [error_msg] * 11 + ["Error", "", None, dash.no_update]
 
         baseline_artifacts = get_baseline_artifacts(df, analysis_choice)
         baseline_results = baseline_artifacts['results']
@@ -1708,7 +1903,13 @@ def run_and_display_results(n_clicks, analysis_choice, reform_name, generate_exc
                 continue
             user_reform_values[param_key] = parsed_val
         reform_params.update(user_reform_values)
-        reform_params['vat_items_list'] = vat_checklist_value
+        selected_vat_items = vat_checklist_value if vat_checklist_value is not None else BASELINE_VAT_STD_RATE_ITEMS
+        selected_vat_items = list(selected_vat_items)
+        reform_params['vat_items_list'] = selected_vat_items
+        baseline_vat_set = set(BASELINE_VAT_STD_RATE_ITEMS)
+        reform_vat_set = set(selected_vat_items)
+        added_exemptions = sorted(baseline_vat_set - reform_vat_set)
+        removed_exemptions = sorted(reform_vat_set - baseline_vat_set)
         
         reform_sim_df = run_simulation(df, reform_params)
         reform_results, reform_analysis_df = run_analysis(reform_sim_df, analysis_choice, baseline_analysis_df)
@@ -1722,7 +1923,55 @@ def run_and_display_results(n_clicks, analysis_choice, reform_name, generate_exc
             html.P(f"Error: {e}"),
             html.P("Please check your input data. Common issues include missing 'dag' column or 0 weights.")
         ], color="danger")
-        return [error_msg] * 11 + ["Simulation failed.", "Error", dash.no_update]
+        return [error_msg] * 11 + ["Simulation failed.", "Error", None, dash.no_update]
+
+    policy_sections_payload = []
+    for section in POLICY_PARAM_SECTIONS:
+        section_rows = []
+        for param_id, label in section['items']:
+            baseline_val = BASELINE_PARAMS.get(param_id)
+            reform_val = reform_params.get(param_id, baseline_val)
+            baseline_display = format_policy_value(param_id, baseline_val)
+            reform_display = format_policy_value(param_id, reform_val)
+            changed = not policy_values_equal(param_id, baseline_val, reform_val)
+            display_value = f"{baseline_display} -> {reform_display}" if changed else baseline_display
+            section_rows.append({
+                'param_id': param_id,
+                'label': label,
+                'baseline_display': baseline_display,
+                'reform_display': reform_display,
+                'display_value': display_value,
+                'changed': changed,
+            })
+        section_payload = {'title': section['title'], 'rows': section_rows}
+        if section['title'] == 'Value-added tax (VAT)':
+            notes = []
+            if not added_exemptions and not removed_exemptions:
+                notes.append({'text': 'No changes in standard-rated/exempt items', 'changed': False})
+            else:
+                if added_exemptions:
+                    count = len(added_exemptions)
+                    noun = "exemption" if count == 1 else "exemptions"
+                    verb = "added" if count == 1 else "added"
+                    notes.append({'text': f"{count} {noun} {verb}", 'changed': True})
+                if removed_exemptions:
+                    count = len(removed_exemptions)
+                    noun = "exemption" if count == 1 else "exemptions"
+                    verb = "removed" if count == 1 else "removed"
+                    notes.append({'text': f"{count} {noun} {verb}", 'changed': True})
+            section_payload['notes'] = notes
+        policy_sections_payload.append(section_payload)
+
+    policy_changes_data = {
+        'scenario_name': reform_name or "Reform scenario",
+        'sections': policy_sections_payload,
+    }
+    if not any(row['changed'] for section in policy_sections_payload for row in section.get('rows', [])) and not any(
+        note.get('changed') for section in policy_sections_payload for note in section.get('notes', [])
+    ):
+        policy_changes_data['no_changes'] = True
+    else:
+        policy_changes_data['no_changes'] = False
 
     # --- Generate TaxBenPol Tab Content ---
     tbp_rows = ['Sum of government revenue', 'By source', '- Direct taxes', '- Social insurance contributions', '- Indirect taxes',
@@ -1848,12 +2097,6 @@ def run_and_display_results(n_clicks, analysis_choice, reform_name, generate_exc
             generation_date = generation_dt.strftime("%Y-%m-%d_%H-%M")
             generation_display = generation_dt.strftime("%Y-%m-%d %H:%M")
 
-            def format_value_display(value):
-                if isinstance(value, (int, float)):
-                    formatted = f"{value:,.4f}".rstrip('0').rstrip('.')
-                    return formatted if formatted else "0"
-                return str(value)
-
             distribution_labels = {
                 1: "Consumption based",
                 2: "Income based",
@@ -1863,37 +2106,43 @@ def run_and_display_results(n_clicks, analysis_choice, reform_name, generate_exc
             distribution_label = distribution_labels.get(analysis_choice, "Income based")
 
             policy_changes_lines = []
-            for key, val in user_reform_values.items():
-                if key == 'vat_items_list':
-                    continue
-                baseline_val = BASELINE_PARAMS.get(key)
-                current_display = format_value_display(val)
-                baseline_display = format_value_display(baseline_val) if baseline_val is not None else "n/a"
-                if baseline_display == current_display:
-                    continue
-                policy_changes_lines.append(f"{key}: {baseline_display} -> {current_display}")
+            for section in POLICY_PARAM_SECTIONS:
+                prefix = section.get('prefix', '')
+                for param_id, label in section['items']:
+                    baseline_val = BASELINE_PARAMS.get(param_id)
+                    reform_val = reform_params.get(param_id, baseline_val)
+                    if policy_values_equal(param_id, baseline_val, reform_val):
+                        continue
+                    baseline_display = format_policy_value(param_id, baseline_val)
+                    reform_display = format_policy_value(param_id, reform_val)
+                    display_label = f"{prefix}{label}:"
+                    policy_changes_lines.append(f"{display_label} {baseline_display} -> {reform_display}")
 
-            selected_vat = vat_checklist_value or []
+            baseline_vat_count = len(BASELINE_VAT_STD_RATE_ITEMS)
+            reform_vat_count = len(selected_vat_items)
             policy_changes_lines.append(
-                f"Selected standard-rated VAT items (count): {len(selected_vat)}/{TOTAL_VAT_ITEMS} "
-                f"(baseline {len(BASELINE_VAT_STD_RATE_ITEMS)}/{TOTAL_VAT_ITEMS})"
+                f"Value-added tax (VAT) – Standard-rated items count: {baseline_vat_count} -> {reform_vat_count}"
             )
-            if set(selected_vat) != set(BASELINE_VAT_STD_RATE_ITEMS):
-                added = sorted(set(selected_vat) - set(BASELINE_VAT_STD_RATE_ITEMS))
-                removed = sorted(set(BASELINE_VAT_STD_RATE_ITEMS) - set(selected_vat))
-                if added:
+            if reform_vat_set != baseline_vat_set:
+                newly_standard_rated = sorted(reform_vat_set - baseline_vat_set)
+                newly_exempt = sorted(baseline_vat_set - reform_vat_set)
+                if newly_standard_rated:
                     policy_changes_lines.append(
-                        "  Added: " + "; ".join(VAT_ITEM_MAP.get(item, {}).get('label', item) for item in added)
+                        "  Added to standard-rated list: " + "; ".join(
+                            VAT_ITEM_MAP.get(item, {}).get('label', item) for item in newly_standard_rated
+                        )
                     )
-                if removed:
+                if newly_exempt:
                     policy_changes_lines.append(
-                        "  Removed: " + "; ".join(VAT_ITEM_MAP.get(item, {}).get('label', item) for item in removed)
+                        "  Moved to exemptions: " + "; ".join(
+                            VAT_ITEM_MAP.get(item, {}).get('label', item) for item in newly_exempt
+                        )
                     )
 
             policy_changes_lines = [line for line in policy_changes_lines if line]
 
             info_rows = [
-                {"Field": "Reform name", "Value": reform_name or "My reform"},
+                {"Field": "Reform name", "Value": reform_name or DEFAULT_REFORM_NAME},
                 {"Field": "Distribution statistic", "Value": distribution_label},
                 {"Field": "Date/time generated", "Value": generation_display},
                 {"Field": "Input file", "Value": INPUT_FILE},
@@ -2055,8 +2304,61 @@ def run_and_display_results(n_clicks, analysis_choice, reform_name, generate_exc
         *([placeholder_content] * 9), 
         "Simulation complete.", 
         results_title_text,
+        policy_changes_data,
         download_output
     )
+
+@app.callback(
+    Output({'type': 'policy-changes-button', 'index': ALL}, 'children'),
+    Output({'type': 'policy-changes-button', 'index': ALL}, 'style'),
+    Output({'type': 'policy-changes-button', 'index': ALL}, 'disabled'),
+    Input('policy-changes-data', 'data'),
+    State({'type': 'policy-changes-button', 'index': ALL}, 'id'),
+)
+def update_policy_change_buttons(policy_data, button_ids):
+    if not button_ids:
+        return [], [], []
+
+    scenario_name = (policy_data or {}).get('scenario_name') or DEFAULT_REFORM_NAME
+    button_label = f"Policy changes ({scenario_name})"
+
+    if not policy_data or not policy_data.get('sections'):
+        styles = [{'display': 'none'} for _ in button_ids]
+        disabled_states = [True for _ in button_ids]
+    else:
+        styles = [{'display': 'inline-flex'} for _ in button_ids]
+        disabled_states = [False for _ in button_ids]
+
+    children = ["Policy changes" for _ in button_ids]
+    return children, styles, disabled_states
+
+@app.callback(
+    Output('policy-changes-modal', 'is_open'),
+    Output('policy-changes-modal-title', 'children'),
+    Output('policy-changes-modal-body', 'children'),
+    Input({'type': 'policy-changes-button', 'index': ALL}, 'n_clicks'),
+    Input('close-policy-changes-modal', 'n_clicks'),
+    State('policy-changes-modal', 'is_open'),
+    State('policy-changes-data', 'data'),
+)
+def toggle_policy_changes_modal(button_clicks, close_click, is_open, policy_data):
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        return is_open, dash.no_update, dash.no_update
+
+    trigger = ctx.triggered[0]['prop_id']
+    if "close-policy-changes-modal" in trigger:
+        return False, dash.no_update, dash.no_update
+
+    if "policy-changes-button" in trigger:
+        if not policy_data or not policy_data.get('sections'):
+            return is_open, dash.no_update, dash.no_update
+        scenario_name = policy_data.get('scenario_name') or DEFAULT_REFORM_NAME
+        modal_title = f"Baseline and reform parameters ({scenario_name})"
+        body_children = build_policy_changes_modal_body(policy_data)
+        return True, modal_title, body_children
+
+    return is_open, dash.no_update, dash.no_update
 
 
 # --- MAIN EXECUTION ---

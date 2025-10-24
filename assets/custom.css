@@ -157,6 +157,85 @@ body {
     padding-left: 0.2rem;
 }
 
+.policy-change-value {
+    font-weight: 600;
+    display: inline-block;
+    min-width: 8.5rem;
+    padding-right: 0.4rem;
+    text-align: right;
+}
+
+.policy-change-value-unchanged {
+    color: #1d4ed8;
+}
+
+.policy-change-value-changed {
+    color: #991b1b;
+}
+
+.policy-change-label {
+    font-size: 0.9rem;
+    padding-left: 0.2rem;
+}
+
+.policy-change-row {
+    margin-bottom: 0.2rem;
+}
+
+.policy-change-note {
+    font-size: 0.9rem;
+}
+
+.policy-change-note-unchanged {
+    color: #1d4ed8;
+}
+
+.policy-change-note-changed {
+    color: #991b1b;
+    font-weight: 600;
+}
+
+.policy-change-note-row {
+    margin-bottom: 0.15rem;
+}
+
+.btn-policy-changes {
+    white-space: nowrap;
+}
+
+.layout-row {
+    display: flex;
+}
+
+@media (min-width: 992px) {
+    .layout-row {
+        flex-wrap: nowrap;
+    }
+    .layout-left-col {
+        flex: 0 0 33.3333%;
+        max-width: 33.3333%;
+        min-width: 420px;
+    }
+    .layout-right-col {
+        flex: 1 1 auto;
+        max-width: calc(100% - 420px);
+    }
+}
+
+@media (max-width: 991.98px) {
+    .layout-row {
+        flex-direction: column;
+    }
+    .layout-left-col,
+    .layout-right-col {
+        flex: 0 0 100%;
+        max-width: 100%;
+    }
+    .layout-right-col {
+        margin-left: 0 !important;
+    }
+}
+
 .accordion-section-title {
     font-weight: 700;
     color: #1f2a44;
@@ -324,7 +403,7 @@ body {
     font-weight: 600;
     padding: 0.35rem 0.8rem;
     border-radius: 12px;
-    margin-left: 0.5rem;
+    margin-left: 0;
     border-width: 1.5px !important;
     box-shadow: none;
 }
