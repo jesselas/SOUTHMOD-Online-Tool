@@ -1,0 +1,27 @@
+# Python virtual environment
+venv/
+
+# Local reference material (EUROMOD/DEVMOD bundle, reference outputs) - not published
+ref/
+reference_calculations/
+
+# Bytecode
+__pycache__/
+*.py[cod]
+
+# macOS metadata
+.DS_Store
+*/.DS_Store
+
+# IDE settings
+.vscode/
+.idea/
+app.log
+__pycache__/
+*.pyc
+
+# Uncropped source logo (assets/unu-wider-logo.png is the cropped one used by the app)
+assets/UNU-WIDER_LOGO_*.png
+
+# Internal working notes, kept out of the published repository
+PLAN.md
